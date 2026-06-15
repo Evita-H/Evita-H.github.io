@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>動物認知</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+  font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 30px 20px;
+}
+.top-bar {
+  width: 100%;
+  max-width: 650px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.home-btn {
+  background: rgba(255,255,255,0.9);
+  color: #e67e22;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 30px;
+  font-size: 1.1em;
+  cursor: pointer;
+  font-weight: bold;
+  text-decoration: none;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+  transition: transform 0.2s;
+}
+.home-btn:hover { transform: scale(1.05); }
+.stats {
+  display: flex;
+  gap: 20px;
+  color: #6d4c2a;
+  font-size: 1.1em;
+}
+.stats span { background: rgba(255,255,255,0.6); padding: 8px 16px; border-radius: 20px; }
+h1 {
+  color: #6d4c2a;
+  font-size: 2.2em;
+  margin-bottom: 8px;
+}
+.prompt {
+  color: #8d6e4a;
+  font-size: 1.2em;
+  margin-bottom: 20px;
+}
+.animal-display {
+  background: #fff;
+  border-radius: 30px;
+  padding: 40px 60px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+  margin-bottom: 20px;
+  text-align: center;
+}
+.animal-emoji {
+  font-size: 7em;
+  display: block;
+  margin-bottom: 10px;
+  animation: bounce 1.5s infinite;
+}
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+.sound-hint {
+  font-size: 1.3em;
+  color: #e67e22;
+}
+.options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  max-width: 500px;
+  width: 100%;
+  margin-bottom: 20px;
+}
+.option-btn {
+  background: #fff;
+  border: 3px solid rgba(0,0,0,0.08);
+  border-radius: 18px;
+  padding: 18px 10px;
+  font-size: 1.3em;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  color: #5d4037;
+  font-family: inherit;
+}
+.option-btn:hover {
+  transform: scale(1.04);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+  border-color: #e67e22;
+}
+.option-btn.correct {
+  background: #d4edda;
+  border-color: #28a745;
+  color: #155724;
+}
+.option-btn.wrong {
+  background: #f8d7da;
+  border-color: #dc3545;
+  color: #721c24;
+  animation: shake 0.4s;
+}
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  25% { transform: translateX(-8px); }
+  75% { transform: translateX(8px); }
+}
+.message {
+  font-size: 1.5em;
+  color: #6d4c2a;
+  min-height: 50px;
+  margin-top: 10px;
+  text-align: center;
+}
+.next-btn {
+  margin-top: 12px;
+  background: #e67e22;
+  color: #fff;
+  border: none;
+  padding: 14px 36px;
+  border-radius: 30px;
+  font-size: 1.2em;
+  cursor: pointer;
+  font-weight: bold;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+  transition: transform 0.2s;
+  display: none;
+}
+.next-btn:hover { transform: scale(1.05); }
+#confettiCanvas {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 999;
+}
+</style>
+</head>
+<body>
+<div class="top-bar">
+  <a class="home-btn" href="index.html">🏠 回首頁</a>
+  <div class="stats">
+    <span>得分：<b id="score">0</b></span>
+    <span>第 <b id="round">1</b>/10 題</span>
+  </div>
+</div>
+
+<h1>🐾 動物認知</h1>
+<p class="prompt">這是什麼動物？選出正確的名字！</p>
+
+<canvas id="confettiCanvas"></canvas>
+<div class="animal-display">
+  <span class="animal-emoji" id="animalEmoji"></span>
+  <div class="sound-hint" id="soundHint"></div>
+</div>
+
+<div class="options" id="options"></div>
+<div class="message" id="message"></div>
+<button class="next-btn" id="nextBtn" onclick="nextRound()">下一題 ➜</button>
+
+<script>
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playTone(freq, duration, type, vol) {
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type || 'sine';
+  o.frequency.value = freq;
+  g.gain.value = vol || 0.18;
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(); o.stop(audioCtx.currentTime + duration);
+}
+function playClick() { playTone(500, 0.08, 'sine', 0.1); }
+function playCorrect() {
+  playTone(523, 0.15, 'sine', 0.2);
+  setTimeout(() => playTone(659, 0.15, 'sine', 0.2), 100);
+  setTimeout(() => playTone(784, 0.25, 'sine', 0.2), 200);
+}
+function playWrong() { playTone(200, 0.25, 'sawtooth', 0.1); }
+function playWin() {
+  [523,587,659,698,784,880,988,1047].forEach((f,i) => {
+    setTimeout(() => playTone(f, 0.2, 'sine', 0.18), i * 120);
+  });
+}
+
+const canvas = document.getElementById('confettiCanvas');
+const ctx = canvas.getContext('2d');
+let particles = [];
+function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener('resize', resizeCanvas); resizeCanvas();
+
+function spawnConfetti(x, y, count) {
+  const colors = ['#e67e22','#f39c12','#e74c3c','#2ecc71','#3498db','#9b59b6','#fd79a8','#1abc9c'];
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x: x, y: y,
+      vx: (Math.random() - 0.5) * 12,
+      vy: (Math.random() - 0.5) * 12 - 4,
+      w: Math.random() * 8 + 4,
+      h: Math.random() * 6 + 3,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rot: Math.random() * 360,
+      vr: (Math.random() - 0.5) * 15,
+      life: 1
+    });
+  }
+}
+
+function spawnBurst(count) {
+  const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count;
+    const speed = 6 + Math.random() * 6;
+    const colors = ['#e67e22','#f39c12','#e74c3c','#2ecc71','#3498db','#9b59b6','#fd79a8','#1abc9c'];
+    particles.push({
+      x: cx, y: cy,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      w: Math.random() * 10 + 5,
+      h: Math.random() * 8 + 4,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rot: Math.random() * 360,
+      vr: (Math.random() - 0.5) * 20,
+      life: 1
+    });
+  }
+}
+
+function animateConfetti() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy;
+    p.vy += 0.3;
+    p.rot += p.vr;
+    p.life -= 0.012;
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rot * Math.PI / 180);
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+    ctx.restore();
+  }
+  if (particles.length > 0) requestAnimationFrame(animateConfetti);
+}
+const ANIMALS = [
+  { emoji: '🐶', name: '小狗', sound: '汪汪汪！' },
+  { emoji: '🐱', name: '小貓', sound: '喵喵喵！' },
+  { emoji: '🐰', name: '兔子', sound: '蹦蹦跳！' },
+  { emoji: '🐮', name: '乳牛', sound: '哞～' },
+  { emoji: '🐷', name: '小豬', sound: '呼嚕嚕！' },
+  { emoji: '🐔', name: '母雞', sound: '咯咯咯！' },
+  { emoji: '🐑', name: '綿羊', sound: '咩～' },
+  { emoji: '🐴', name: '小馬', sound: '嘶～' },
+  { emoji: '🐘', name: '大象', sound: '嗚～嗚～' },
+  { emoji: '🦁', name: '獅子', sound: '吼～～' },
+  { emoji: '🐯', name: '老虎', sound: '嗷嗚！' },
+  { emoji: '🐻', name: '熊熊', sound: '吼！' },
+  { emoji: '🐼', name: '熊貓', sound: '嗯嗯～' },
+  { emoji: '🦊', name: '狐狸', sound: '嘻嘻～' },
+  { emoji: '🐸', name: '青蛙', sound: '呱呱呱！' },
+  { emoji: '🐟', name: '小魚', sound: '咕嚕嚕！' },
+  { emoji: '🐢', name: '烏龜', sound: '慢慢爬～' },
+  { emoji: '🦆', name: '鴨子', sound: '嘎嘎嘎！' },
+  { emoji: '🐵', name: '猴子', sound: '吱吱吱！' },
+  { emoji: '🐧', name: '企鵝', sound: '搖搖擺擺～' },
+];
+
+let score = 0, round = 0, totalRounds = 10, currentAnimal = null, answered = false;
+const usedIndices = [];
+
+function pickAnimal() {
+  let idx;
+  do { idx = Math.floor(Math.random() * ANIMALS.length); } while (usedIndices.includes(idx));
+  usedIndices.push(idx);
+  return ANIMALS[idx];
+}
+
+function generateOptions(correct) {
+  const opts = [correct];
+  const others = ANIMALS.filter(a => a.name !== correct.name);
+  const shuffled = shuffle([...others]);
+  for (let i = 0; i < 3; i++) opts.push(shuffled[i]);
+  return shuffle(opts);
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function showRound() {
+  answered = false;
+  document.getElementById('message').textContent = '';
+  document.getElementById('nextBtn').style.display = 'none';
+  document.getElementById('nextBtn').textContent = '下一題 ➜';
+
+  currentAnimal = pickAnimal();
+  document.getElementById('animalEmoji').textContent = currentAnimal.emoji;
+  document.getElementById('soundHint').textContent = currentAnimal.sound;
+  document.getElementById('round').textContent = round + 1;
+
+  const opts = generateOptions(currentAnimal);
+  const container = document.getElementById('options');
+  container.innerHTML = '';
+  opts.forEach(a => {
+    const btn = document.createElement('button');
+    btn.className = 'option-btn';
+    btn.textContent = a.name;
+    btn.addEventListener('click', () => checkAnswer(btn, a));
+    container.appendChild(btn);
+  });
+}
+
+function checkAnswer(btn, chosen) {
+  if (answered) return;
+  answered = true;
+  playClick();
+  if (chosen.name === currentAnimal.name) {
+    playCorrect();
+    btn.classList.add('correct');
+    const rect = btn.getBoundingClientRect();
+    spawnConfetti(rect.left + rect.width / 2, rect.top + rect.height / 2, 40);
+    if (particles.length <= 40) animateConfetti();
+    score++;
+    document.getElementById('score').textContent = score;
+    document.getElementById('message').textContent = '✅ 答對了！這是「' + currentAnimal.name + '」！';
+  } else {
+    playWrong();
+    btn.classList.add('wrong');
+    document.getElementById('message').textContent = '❌ 不對哦！正確答案是「' + currentAnimal.name + '」';
+  }
+
+  if (round + 1 < totalRounds) {
+    document.getElementById('nextBtn').style.display = 'inline-block';
+  } else {
+    playWin();
+    spawnBurst(120);
+    animateConfetti();
+    let verdict = score >= 8 ? '🌟 太厲害了！' : score >= 5 ? '👍 不錯哦！' : '💪 再加油！';
+    document.getElementById('message').textContent = verdict + ' 你答對了 ' + score + '/' + totalRounds + ' 題！';
+    document.getElementById('nextBtn').textContent = '🔄 再玩一次';
+    document.getElementById('nextBtn').style.display = 'inline-block';
+    document.getElementById('nextBtn').onclick = () => {
+      round = 0; score = 0; usedIndices.length = 0;
+      document.getElementById('score').textContent = '0';
+      showRound();
+    };
+  }
+}
+
+function nextRound() {
+  round++;
+  showRound();
+}
+
+showRound();
+</script>
+</body>
+</html>

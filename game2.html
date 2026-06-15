@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>顏色大冒險</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+  font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 30px 20px;
+}
+.top-bar {
+  width: 100%;
+  max-width: 650px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.home-btn {
+  background: rgba(255,255,255,0.9);
+  color: #0d9;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 30px;
+  font-size: 1.1em;
+  cursor: pointer;
+  font-weight: bold;
+  text-decoration: none;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+  transition: transform 0.2s;
+}
+.home-btn:hover { transform: scale(1.05); }
+.stats {
+  display: flex;
+  gap: 20px;
+  color: #fff;
+  font-size: 1.1em;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+}
+.stats span { background: rgba(255,255,255,0.3); padding: 8px 16px; border-radius: 20px; }
+h1 {
+  color: #fff;
+  font-size: 2.2em;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+  margin-bottom: 8px;
+}
+.prompt {
+  color: #fff;
+  font-size: 1.2em;
+  margin-bottom: 20px;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+}
+.target {
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  border: 6px solid #fff;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+  margin-bottom: 10px;
+  transition: background-color 0.3s;
+}
+.target-label {
+  font-size: 1.6em;
+  color: #fff;
+  font-weight: bold;
+  margin-bottom: 25px;
+  text-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+}
+.options {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+.option {
+  width: 100px;
+  height: 100px;
+  border-radius: 20px;
+  border: 4px solid rgba(255,255,255,0.6);
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+}
+.option:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 25px rgba(0,0,0,0.25);
+}
+.option.correct {
+  border-color: #fff;
+  animation: pop 0.5s;
+}
+.option.wrong {
+  animation: shake 0.4s;
+}
+@keyframes pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  25% { transform: translateX(-8px); }
+  75% { transform: translateX(8px); }
+}
+.message {
+  font-size: 1.5em;
+  color: #fff;
+  text-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+  min-height: 50px;
+  margin-top: 10px;
+}
+.next-btn {
+  margin-top: 12px;
+  background: #fff;
+  color: #0d9;
+  border: none;
+  padding: 14px 36px;
+  border-radius: 30px;
+  font-size: 1.2em;
+  cursor: pointer;
+  font-weight: bold;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+  transition: transform 0.2s;
+  display: none;
+}
+.next-btn:hover { transform: scale(1.05); }
+#confettiCanvas {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 999;
+}
+</style>
+</head>
+<body>
+<div class="top-bar">
+  <a class="home-btn" href="index.html">🏠 回首頁</a>
+  <div class="stats">
+    <span>得分：<b id="score">0</b></span>
+    <span>第 <b id="round">1</b>/8 題</span>
+  </div>
+</div>
+
+<h1>🎨 顏色大冒險</h1>
+<p class="prompt">點擊正確的顏色！</p>
+
+<canvas id="confettiCanvas"></canvas>
+<div class="target" id="target"></div>
+<div class="target-label" id="targetLabel"></div>
+<div class="options" id="options"></div>
+<div class="message" id="message"></div>
+<button class="next-btn" id="nextBtn" onclick="nextRound()">下一題 ➜</button>
+
+<script>
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playTone(freq, duration, type, vol) {
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type || 'sine';
+  o.frequency.value = freq;
+  g.gain.value = vol || 0.18;
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(); o.stop(audioCtx.currentTime + duration);
+}
+function playClick() { playTone(500, 0.08, 'sine', 0.1); }
+function playCorrect() {
+  playTone(523, 0.15, 'sine', 0.2);
+  setTimeout(() => playTone(659, 0.15, 'sine', 0.2), 100);
+  setTimeout(() => playTone(784, 0.25, 'sine', 0.2), 200);
+}
+function playWrong() { playTone(200, 0.25, 'sawtooth', 0.1); }
+function playWin() {
+  [523,587,659,698,784,880,988,1047].forEach((f,i) => {
+    setTimeout(() => playTone(f, 0.2, 'sine', 0.18), i * 120);
+  });
+}
+
+const canvas = document.getElementById('confettiCanvas');
+const ctx = canvas.getContext('2d');
+let particles = [];
+function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener('resize', resizeCanvas); resizeCanvas();
+
+function spawnConfetti(x, y, count) {
+  const colors = ['#43e97b','#38f9d7','#f1c40f','#e74c3c','#3498db','#9b59b6','#e67e22','#fd79a8'];
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x: x, y: y,
+      vx: (Math.random() - 0.5) * 12,
+      vy: (Math.random() - 0.5) * 12 - 4,
+      w: Math.random() * 8 + 4,
+      h: Math.random() * 6 + 3,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rot: Math.random() * 360,
+      vr: (Math.random() - 0.5) * 15,
+      life: 1
+    });
+  }
+}
+
+function spawnBurst(count) {
+  const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count;
+    const speed = 6 + Math.random() * 6;
+    const colors = ['#43e97b','#38f9d7','#f1c40f','#e74c3c','#3498db','#9b59b6','#e67e22','#fd79a8'];
+    particles.push({
+      x: cx, y: cy,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      w: Math.random() * 10 + 5,
+      h: Math.random() * 8 + 4,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rot: Math.random() * 360,
+      vr: (Math.random() - 0.5) * 20,
+      life: 1
+    });
+  }
+}
+
+function animateConfetti() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy;
+    p.vy += 0.3;
+    p.rot += p.vr;
+    p.life -= 0.012;
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rot * Math.PI / 180);
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+    ctx.restore();
+  }
+  if (particles.length > 0) requestAnimationFrame(animateConfetti);
+}
+const COLORS = [
+  { name: '紅色', hex: '#e74c3c' },
+  { name: '藍色', hex: '#3498db' },
+  { name: '黃色', hex: '#f1c40f' },
+  { name: '綠色', hex: '#2ecc71' },
+  { name: '紫色', hex: '#9b59b6' },
+  { name: '橘色', hex: '#e67e22' },
+  { name: '粉紅色', hex: '#fd79a8' },
+  { name: '咖啡色', hex: '#8B4513' },
+  { name: '黑色', hex: '#2d3436' },
+  { name: '灰色', hex: '#95a5a6' },
+];
+
+let score = 0, round = 0, totalRounds = 8, currentColor = null, answered = false;
+const usedIndices = [];
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function pickColor() {
+  let idx;
+  do { idx = Math.floor(Math.random() * COLORS.length); } while (usedIndices.includes(idx));
+  usedIndices.push(idx);
+  return COLORS[idx];
+}
+
+function generateOptions(correct) {
+  const opts = [correct];
+  const others = COLORS.filter(c => c.hex !== correct.hex);
+  shuffle(others);
+  for (let i = 0; i < 3; i++) opts.push(others[i]);
+  return shuffle(opts);
+}
+
+function showRound() {
+  answered = false;
+  document.getElementById('message').textContent = '';
+  document.getElementById('nextBtn').style.display = 'none';
+
+  currentColor = pickColor();
+  document.getElementById('target').style.backgroundColor = currentColor.hex;
+  document.getElementById('targetLabel').textContent = '這是什麼顏色？';
+  document.getElementById('round').textContent = round + 1;
+
+  const opts = generateOptions(currentColor);
+  const container = document.getElementById('options');
+  container.innerHTML = '';
+  opts.forEach(c => {
+    const btn = document.createElement('div');
+    btn.className = 'option';
+    btn.style.backgroundColor = c.hex;
+    btn.addEventListener('click', () => checkAnswer(btn, c));
+    container.appendChild(btn);
+  });
+}
+
+function checkAnswer(btn, chosen) {
+  if (answered) return;
+  answered = true;
+  playClick();
+  if (chosen.hex === currentColor.hex) {
+    playCorrect();
+    btn.classList.add('correct');
+    const rect = btn.getBoundingClientRect();
+    spawnConfetti(rect.left + rect.width / 2, rect.top + rect.height / 2, 40);
+    if (particles.length <= 40) animateConfetti();
+    score++;
+    document.getElementById('score').textContent = score;
+    document.getElementById('message').textContent = '✅ 答對了！這是「' + currentColor.name + '」！';
+  } else {
+    playWrong();
+    btn.classList.add('wrong');
+    document.getElementById('message').textContent = '❌ 不對哦！正確答案是「' + currentColor.name + '」';
+  }
+  if (round + 1 < totalRounds) {
+    document.getElementById('nextBtn').style.display = 'inline-block';
+  } else {
+    playWin();
+    spawnBurst(120);
+    animateConfetti();
+    document.getElementById('message').textContent += '\n🎉 遊戲結束！你答對了 ' + score + '/' + totalRounds + ' 題！';
+    document.getElementById('nextBtn').textContent = '🔄 再玩一次';
+    document.getElementById('nextBtn').style.display = 'inline-block';
+    document.getElementById('nextBtn').onclick = () => { round = 0; score = 0; usedIndices.length = 0; document.getElementById('score').textContent = '0'; document.getElementById('nextBtn').textContent = '下一題 ➜'; document.getElementById('nextBtn').onclick = nextRound; showRound(); };
+  }
+}
+
+function nextRound() {
+  round++;
+  showRound();
+}
+
+showRound();
+</script>
+</body>
+</html>
